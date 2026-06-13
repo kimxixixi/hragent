@@ -1,0 +1,13 @@
+{
+  "name": "hr-training-evaluator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HR 培训心得评价 Agent — 纯对话式智能评价系统",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd backend && npm run build && cd ../frontend && npm run build",
+    "demo": "cd backend && npx tsx src/demo.ts"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.db
+*.db-journal
+*.db-wal
+.DS_Store
+Thumbs.db
+backend/data/
+backend/uploads/
+backend/test_*.json
