@@ -32,7 +32,8 @@ async function callLLM(systemPrompt: string, userMessage: string): Promise<strin
     body: JSON.stringify({
       model,
       max_tokens: 4096,
-      temperature: 0.3,
+      temperature: 0.8,
+      seed: Math.floor(Math.random() * 100000),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },

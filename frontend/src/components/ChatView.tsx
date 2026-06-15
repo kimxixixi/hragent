@@ -11,6 +11,7 @@ export const ChatView: React.FC = () => {
     messages,
     isLoading,
     setIsLoading,
+    employeeInfo,
     exceptionCount,
     pendingExceptions,
     resolveException,
@@ -33,14 +34,24 @@ export const ChatView: React.FC = () => {
   const handleBatchEvaluate = (reflections: ReflectionInput[]) => {
     if (reflections.length === 0) return;
 
+    // 自动附带已报到的员工信息
+    const enriched = reflections.map((r) => ({
+      ...r,
+      trainee: {
+        name: employeeInfo?.name || r.trainee.name,
+        employeeId: employeeInfo?.employeeId || r.trainee.employeeId,
+        isManagement: r.trainee.isManagement || false,
+      },
+    }));
+
     // 即时添加用户消息
     addMessage({
       id: `user-${Date.now()}`,
       type: 'text',
       role: 'user',
-      content: reflections.length === 1
-        ? reflections[0].content
-        : `提交了 ${reflections.length} 篇心得`,
+      content: enriched.length === 1
+        ? enriched[0].content
+        : `提交了 ${enriched.length} 篇心得`,
       timestamp: new Date().toISOString(),
     });
 
@@ -49,7 +60,7 @@ export const ChatView: React.FC = () => {
 
     // 启动 SSE 流式评价
     streamEvaluate(
-      { reflections },
+      { reflections: enriched },
       handleSSEEvent,
       () => {
         setIsLoading(false);

@@ -13,19 +13,29 @@ export function useChat() {
       role: 'agent',
       content: `👋 你好！我是**培小评**，你的培训成长伙伴～
 
-参加了培训？把心得发给我吧，我会：
-- 📝 认真读你的心得
-- ⭐ 给你多维度的反馈
-- 💡 提供具体的成长建议
+在开始之前，请告诉我你的**姓名和工号**，比如：
 
-**直接粘贴你的培训心得，我们开始吧！**`,
+\`张三 S001\`
+
+这样我就能记住你啦～`,
       timestamp: new Date().toISOString(),
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [exceptionCount, setExceptionCount] = useState(0);
   const [pendingExceptions, setPendingExceptions] = useState<any[]>([]);
+  const [employeeInfo, setEmployeeInfo] = useState<{
+    name: string;
+    employeeId: string;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 检测是否为"姓名 工号"格式
+  const parseEmployeeInfo = useCallback((text: string) => {
+    // 匹配: 中文名 + 空格 + 字母数字工号
+    const m = text.trim().match(/^([一-龥]{2,4})\s+([A-Za-z0-9]{2,10})$/);
+    return m ? { name: m[1], employeeId: m[2] } : null;
+  }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
@@ -71,7 +81,7 @@ export function useChat() {
   }, []);
 
   /**
-   * 发送文本消息
+   * 发送文本消息（含员工报到检测）
    */
   const sendMessage = useCallback(
     async (text: string) => {
@@ -85,6 +95,23 @@ export function useChat() {
         timestamp: new Date().toISOString(),
       };
       addMessage(userMsg);
+
+      // 检测是否在报到（输入姓名工号）
+      if (!employeeInfo) {
+        const info = parseEmployeeInfo(text);
+        if (info) {
+          setEmployeeInfo(info);
+          addMessage({
+            id: `confirm-${Date.now()}`,
+            type: 'system',
+            role: 'agent',
+            content: `✅ 已记住！**${info.name}**（工号 ${info.employeeId}），现在可以提交你的培训心得了～`,
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+      }
+
       setIsLoading(true);
 
       try {
@@ -104,7 +131,7 @@ export function useChat() {
         setIsLoading(false);
       }
     },
-    [addMessage, addMessages]
+    [addMessage, addMessages, employeeInfo, parseEmployeeInfo]
   );
 
   /**
@@ -169,8 +196,10 @@ export function useChat() {
     setPendingExceptions((prev) => prev.filter((e) => e.id !== evalId));
     setExceptionCount((c) => Math.max(0, c - 1));
 
-    if (customFeedback && ex) {
-      // HR 自定义反馈 → 作为 Agent 回复展示在对话中
+    if (!ex) return;
+
+    if (customFeedback) {
+      // HR 驳回并编辑 → 员工看到 HR 写的反馈
       addMessage({
         id: `hr-feedback-${Date.now()}`,
         type: 'text',
@@ -179,12 +208,13 @@ export function useChat() {
         timestamp: new Date().toISOString(),
       });
     } else {
-      // 直接通过 → 展示系统评价
+      // HR 直接通过 → 员工看到 AI 评价卡片（和正常高分流程一样）
       addMessage({
-        id: `hr-resolved-${Date.now()}`,
-        type: 'system',
-        role: 'system',
-        content: `✅ 已通过系统评价并发送给员工。`,
+        id: ex.id,
+        type: 'evaluation_card',
+        role: 'agent',
+        content: `✅ 你的心得评价出来啦！总分 **${ex.totalScore}分**，下面是详细反馈～`,
+        payload: ex,
         timestamp: new Date().toISOString(),
       });
     }
@@ -194,6 +224,7 @@ export function useChat() {
     messages,
     isLoading,
     setIsLoading,
+    employeeInfo,
     exceptionCount,
     pendingExceptions,
     resolveException,

@@ -51,7 +51,7 @@ function buildContent(result: EvaluationResult) {
 
   const subject = `⚠️ ${trainee.name}(${totalScore}分) — 培训心得需复核`;
   const body = [
-    `学员：${trainee.name}`,
+    `学员：${trainee.name}${trainee.employeeId ? `（工号 ${trainee.employeeId}）` : ''}`,
     `部门：${trainee.department || '未知'}`,
     `岗位：${trainee.position || '未知'}${trainee.isManagement ? '（管理岗）' : ''}`,
     `培训：${trainingTitle}`,

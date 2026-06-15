@@ -7,7 +7,7 @@ import { ProgressMessage } from './messages/ProgressMessage';
 
 interface MessageListProps {
   messages: ChatMessage[];
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  messagesEndRef?: React.RefObject<HTMLDivElement>;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({ messages, messagesEndRef }) => {
