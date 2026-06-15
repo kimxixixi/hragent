@@ -11,13 +11,9 @@ export function useChat() {
       id: 'welcome',
       type: 'system',
       role: 'agent',
-      content: `👋 你好！我是**培小评**，你的培训成长伙伴～
+      content: `👋 你好，我是培小评～
 
-在开始之前，请告诉我你的**姓名和工号**，比如：
-
-\`张三 S001\`
-
-这样我就能记住你啦～`,
+请先告诉我你的**姓名和工号**，比如：\`张三 S001\``,
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -30,11 +26,26 @@ export function useChat() {
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 检测是否为"姓名 工号"格式
+  // 灵活检测姓名+工号格式
   const parseEmployeeInfo = useCallback((text: string) => {
-    // 匹配: 中文名 + 空格 + 字母数字工号
-    const m = text.trim().match(/^([一-龥]{2,4})\s+([A-Za-z0-9]{2,10})$/);
-    return m ? { name: m[1], employeeId: m[2] } : null;
+    const t = text.trim();
+    // 匹配: 中文名(2-4字) + 分隔符(空格/逗号/冒号/无) + 工号(数字或字母数字2-10位)
+    const patterns = [
+      /^([一-鿿]{2,4})[\s,，：:]+([A-Za-z0-9\-]{2,10})$/,
+      /^([一-鿿]{2,4})(\d{3,8})$/,
+      /^([A-Za-z0-9\-]{2,10})[\s,，：:]+([一-鿿]{2,4})$/,
+      /^(\d{3,8})\s*[\s,，：:]?\s*([一-鿿]{2,4})$/,
+    ];
+    for (const p of patterns) {
+      const m = t.match(p);
+      if (m) {
+        const a = m[1], b = m[2];
+        return /[一-鿿]/.test(a)
+          ? { name: a, employeeId: b }
+          : { name: b, employeeId: a };
+      }
+    }
+    return null;
   }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {

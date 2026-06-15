@@ -33,6 +33,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
         text.includes('工作'));
     const isLongText = text.length > 50;
 
+    // 姓名工号格式 → 放行（报到用）
+    const isNameId = /[一-鿿]{2,4}[\s,，：:]?[A-Za-z0-9\-]{2,10}/.test(text) ||
+                     /\d{3,8}[\s,，：:]?[一-鿿]{2,4}/.test(text);
+
     if (looksLikeReflection || isLongText) {
       const reflection: ReflectionInput = {
         trainee: { name: '' },
@@ -40,8 +44,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
         content: text,
       };
       onBatchEvaluate([reflection]);
-    } else if (text.length <= 20 && text.length >= 2) {
-      // 太短 → 提示多写点
+    } else if (!isNameId && text.length <= 20 && text.length >= 5) {
+      // 太短且不是报到 → 提示多写点
       onSendMessage(`[SYSTEM_HINT:TOO_SHORT]${text}`);
     } else {
       onSendMessage(text);
