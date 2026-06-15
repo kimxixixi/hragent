@@ -34,15 +34,9 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ result }) => {
         <div className="eval-card-info">
           <div className="eval-card-name">
             {result.trainee.name}
-            {result.trainee.isManagement && (
-              <span className="eval-badge eval-badge-mgmt">管理岗</span>
-            )}
           </div>
           <div className="eval-card-training">{result.trainingTitle}</div>
           <div className="eval-card-meta">
-            {result.trainee.department && (
-              <span className="eval-meta-tag">{result.trainee.department}</span>
-            )}
             <span className="eval-meta-tag">{TONE_LABELS[result.toneLevel] || result.toneLevel}</span>
           </div>
         </div>

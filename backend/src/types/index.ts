@@ -2,10 +2,7 @@ import { z } from 'zod';
 
 // ── 心得输入 ──
 export const TraineeInfoSchema = z.object({
-  name: z.string().min(1, '学员姓名不能为空'),
-  department: z.string().optional(),
-  position: z.string().optional(),
-  isManagement: z.boolean().default(false),
+  name: z.string().min(1, '姓名不能为空'),
   employeeId: z.string().optional(),
 });
 
@@ -101,12 +98,8 @@ export interface ExceptionUpdateRequest {
 export interface EvaluationRow {
   id: string;
   trainee_name: string;
-  trainee_department: string;
-  trainee_position: string;
-  is_management: number;
   employee_id: string;
   training_title: string;
-  training_date: string;
   content: string;
   total_score: number;
   dimensions_json: string;

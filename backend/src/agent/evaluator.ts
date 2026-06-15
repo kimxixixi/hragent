@@ -85,8 +85,7 @@ export async function evaluateReflection(
   const { system, user } = buildEvaluationMessages(
     content,
     trainingTitle,
-    trainee.name,
-    trainee.isManagement
+    trainee.name
   );
 
   // 2. 调用 LLM API
@@ -104,7 +103,7 @@ export async function evaluateReflection(
   }
 
   // 4. 应用语气引擎
-  const expectedTone = determineToneLevel(parsed.totalScore, trainee.isManagement);
+  const expectedTone = determineToneLevel(parsed.totalScore);
   const actualTone = parsed.toneLevel || expectedTone;
 
   // 5. 安全过滤
@@ -120,8 +119,7 @@ export async function evaluateReflection(
 
   // 6. 异常检测
   const { isException, reason: exceptionReason } = shouldFlagException(
-    parsed.totalScore,
-    trainee.isManagement
+    parsed.totalScore
   );
 
   // 7. 组装结果（先组装，用于通知）

@@ -78,15 +78,14 @@ export const SYSTEM_PROMPT = `# 角色定义
 export function buildEvaluationMessages(
   reflectionContent: string,
   trainingTitle: string,
-  traineeName: string,
-  isManagement: boolean
+  traineeName: string
 ) {
   const styles = [
     `员工 ${traineeName} 刚刚完成了培训《${trainingTitle}》，ta 的心得如下，你读完后给 ta 一个真诚的反馈：`,
     `${traineeName} 提交了《${trainingTitle}》的心得。请你像朋友一样，认真地告诉 ta 哪里写得好、怎么可以更好：`,
     `来看看 ${traineeName} 的《${trainingTitle}》心得吧。用你温暖又专业的眼光，帮 ta 发现亮点和成长空间：`,
     `${traineeName} 参加完《${trainingTitle}》培训后写下了这些感想。你作为 ta 的成长伙伴，用聊天的口吻给 ta 反馈：`,
-    `下面是一位${isManagement ? '管理者' : '同事'} ${traineeName} 的《${trainingTitle}》心得。用轻松自然的语气，根据你的评分标准给 ta 反馈：`,
+    `${traineeName} 刚完成了《${trainingTitle}》，ta 的心得如下，用轻松自然的语气给 ta 反馈：`,
   ];
   const style = styles[Math.floor(Math.random() * styles.length)];
 

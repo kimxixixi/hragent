@@ -55,9 +55,6 @@ export const ExceptionCard: React.FC<ExceptionCardProps> = ({ result }) => {
         <div className="exception-info">
           <div className="exception-title">
             {result.trainee.name}
-            {result.trainee.isManagement && (
-              <span className="eval-badge eval-badge-mgmt">管理岗</span>
-            )}
             <span className="eval-badge eval-badge-warn">需复核</span>
           </div>
           <div className="exception-subtitle">

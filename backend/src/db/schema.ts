@@ -28,13 +28,8 @@ function initializeSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS evaluations (
       id TEXT PRIMARY KEY,
       trainee_name TEXT NOT NULL,
-      trainee_department TEXT DEFAULT '',
-      trainee_position TEXT DEFAULT '',
-      is_management INTEGER DEFAULT 0,
       employee_id TEXT DEFAULT '',
       training_title TEXT NOT NULL,
-      training_date TEXT DEFAULT '',
-      training_type TEXT DEFAULT '心得',
       content TEXT NOT NULL,
       total_score REAL NOT NULL,
       dimensions_json TEXT NOT NULL,
@@ -51,7 +46,6 @@ function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_evaluations_trainee ON evaluations(trainee_name);
     CREATE INDEX IF NOT EXISTS idx_evaluations_created ON evaluations(created_at);
     CREATE INDEX IF NOT EXISTS idx_evaluations_exception ON evaluations(is_exception, exception_status);
-    CREATE INDEX IF NOT EXISTS idx_evaluations_department ON evaluations(trainee_department);
   `);
 }
 

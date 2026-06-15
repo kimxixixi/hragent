@@ -8,9 +8,6 @@ interface HRPanelProps {
   onClose: () => void;
 }
 
-/**
- * 生成驳回时的评价框架模板
- */
 function buildFeedbackTemplate(ex: EvaluationResult): string {
   return `感谢你提交《${ex.trainingTitle}》的培训心得！
 
@@ -52,7 +49,6 @@ export const HRPanel: React.FC<HRPanelProps> = ({
   return (
     <div className="hr-panel-overlay" onClick={onClose}>
       <div className="hr-panel" onClick={(e) => e.stopPropagation()}>
-        {/* 头部 */}
         <div className="hr-panel-header">
           <div className="hr-panel-title">
             <span>📱</span>
@@ -64,7 +60,6 @@ export const HRPanel: React.FC<HRPanelProps> = ({
           <button className="btn-close" onClick={onClose}>✕</button>
         </div>
 
-        {/* 内容 */}
         <div className="hr-panel-body">
           {exceptions.length === 0 ? (
             <div className="hr-empty">
@@ -82,13 +77,12 @@ export const HRPanel: React.FC<HRPanelProps> = ({
                     <div className="hr-notify-info">
                       <div className="hr-notify-name">
                         {ex.trainee.name}
-                        {ex.trainee.isManagement && (
-                          <span className="eval-badge eval-badge-mgmt">管理岗</span>
+                        {ex.trainee.employeeId && (
+                          <span className="eval-badge">工号 {ex.trainee.employeeId}</span>
                         )}
                       </div>
                       <div className="hr-notify-dept">
-                        {ex.trainee.department || '未知部门'}
-                        {ex.trainee.position ? ` · ${ex.trainee.position}` : ''}
+                        {ex.trainingTitle}
                       </div>
                     </div>
                     <div className="hr-notify-score" style={{
@@ -98,7 +92,6 @@ export const HRPanel: React.FC<HRPanelProps> = ({
                     </div>
                   </div>
 
-                  {/* 编辑模式 */}
                   {editingId === ex.id ? (
                     <div className="hr-edit-area">
                       <div className="hr-edit-label">
@@ -132,9 +125,6 @@ export const HRPanel: React.FC<HRPanelProps> = ({
                       <div className="hr-notify-body">
                         <div className="hr-notify-reason">
                           ⚠️ {ex.exceptionReason || '低分异常，需复核'}
-                        </div>
-                        <div className="hr-notify-training">
-                          培训：{ex.trainingTitle}
                         </div>
                         <div className="hr-notify-feedback">
                           <strong>系统建议反馈：</strong>

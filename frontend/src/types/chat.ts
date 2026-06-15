@@ -19,9 +19,6 @@ export interface ChatMessage {
 // ── 评价结果 ──
 export interface TraineeInfo {
   name: string;
-  department?: string;
-  position?: string;
-  isManagement: boolean;
   employeeId?: string;
 }
 

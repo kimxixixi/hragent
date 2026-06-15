@@ -34,24 +34,36 @@ export const ChatView: React.FC = () => {
   const handleBatchEvaluate = (reflections: ReflectionInput[]) => {
     if (reflections.length === 0) return;
 
+    // 未报到 → 提醒
+    if (!employeeInfo) {
+      addMessage({
+        id: `remind-${Date.now()}`,
+        type: 'system',
+        role: 'agent',
+        content: `⚠️ 请先告诉我你的**姓名和工号**，比如 \`张三 S001\`，然后才能提交心得哦～`,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     // 自动附带已报到的员工信息
     const enriched = reflections.map((r) => ({
       ...r,
       trainee: {
         name: employeeInfo?.name || r.trainee.name,
         employeeId: employeeInfo?.employeeId || r.trainee.employeeId,
-        isManagement: r.trainee.isManagement || false,
       },
     }));
 
     // 即时添加用户消息
+    const fileNames = enriched.map((r) => `《${r.trainingTitle}》`).join('、');
     addMessage({
       id: `user-${Date.now()}`,
       type: 'text',
       role: 'user',
       content: enriched.length === 1
         ? enriched[0].content
-        : `提交了 ${enriched.length} 篇心得`,
+        : `📁 上传了 ${enriched.length} 个文件：${fileNames}`,
       timestamp: new Date().toISOString(),
     });
 

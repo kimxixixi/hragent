@@ -171,17 +171,6 @@ export function useChat() {
         }
       } else if (event.type === 'complete') {
         removeProgress();
-        if (event.total > 0) {
-          if (event.total > 1) {
-            addMessage({
-              id: `complete-${Date.now()}`,
-              type: 'system',
-              role: 'system',
-              content: `✅ 全部评价完成，共 ${event.completed} 篇心得。`,
-              timestamp: new Date().toISOString(),
-            });
-          }
-        }
       }
     },
     [addMessage, upsertProgress, removeProgress]
