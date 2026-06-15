@@ -20,7 +20,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
     const text = input.trim();
     if (!text) return;
 
-    // 检测是否为心得内容
     const looksLikeReflection =
       text.length > 20 &&
       (text.includes('培训') ||
@@ -41,6 +40,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
         content: text,
       };
       onBatchEvaluate([reflection]);
+    } else if (text.length <= 20 && text.length >= 2) {
+      // 太短 → 提示多写点
+      onSendMessage(`[SYSTEM_HINT:TOO_SHORT]${text}`);
     } else {
       onSendMessage(text);
     }

@@ -87,6 +87,26 @@ export function useChat() {
     async (text: string) => {
       if (!text.trim()) return;
 
+      // 短文本提示
+      if (text.startsWith('[SYSTEM_HINT:TOO_SHORT]')) {
+        const content = text.replace('[SYSTEM_HINT:TOO_SHORT]', '');
+        addMessage({
+          id: `user-${Date.now()}`,
+          type: 'text',
+          role: 'user',
+          content,
+          timestamp: new Date().toISOString(),
+        });
+        addMessage({
+          id: `hint-${Date.now()}`,
+          type: 'system',
+          role: 'agent',
+          content: `😊 你的心得太简短了（不足 20 字），我没法给出有意义的反馈哦～\n\n试试多写一点，比如：\n- 培训中学到了什么具体的知识或方法？\n- 对你有什么启发或改变？\n- 打算怎么用到工作中？\n\n写好了再发给我吧！`,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         type: 'text',
