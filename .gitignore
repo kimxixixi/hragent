@@ -9,3 +9,13 @@ Thumbs.db
 backend/data/
 backend/uploads/
 backend/test_*.json
+
+# 文档与记录（本地保留，不同步到 git，仅 README 例外）
+.workbuddy/
+*.docx
+*.html
+下一阶段改进方向.md
+项目回顾与建议.md
+开发记录.md
+员工使用指南.md
+\# Summarize HR agent plan from 1.md.txt
