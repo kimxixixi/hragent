@@ -3,6 +3,7 @@ import multer from 'multer';
 import mammoth from 'mammoth';
 import path from 'path';
 import fs from 'fs';
+import { authRequired } from '../auth/middleware';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ const upload = multer({
  * POST /api/upload/docx
  * 上传 Word 文档并提取文本
  */
-router.post('/docx', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/docx', authRequired, upload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: '请上传文件' });
@@ -66,7 +67,7 @@ router.post('/docx', upload.single('file'), async (req: Request, res: Response) 
  * POST /api/upload/text
  * 上传文本文件并读取内容
  */
-router.post('/text', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/text', authRequired, upload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: '请上传文件' });

@@ -4,19 +4,77 @@ import type {
   EvaluateRequest,
   EvaluationResult,
   ExceptionInfo,
+  Identity,
+  LoginResponse,
 } from '../types/chat';
 
 const API_BASE = '/api';
+const TOKEN_KEY = 'hragent.token';
+const IDENTITY_KEY = 'hragent.identity';
 
-// 当前报到身份（内存态，随页面刷新重置；用于给 HR 专属接口带上工号）
-let currentEmployeeId: string | undefined;
-
-export function setCurrentEmployeeId(id: string | undefined) {
-  currentEmployeeId = id;
+// ── 会话存储 ──
+export function setAuth(auth: LoginResponse): void {
+  localStorage.setItem(TOKEN_KEY, auth.token);
+  localStorage.setItem(IDENTITY_KEY, JSON.stringify(auth.identity));
 }
 
-export function getCurrentEmployeeId(): string | undefined {
-  return currentEmployeeId;
+export function getToken(): string | undefined {
+  return localStorage.getItem(TOKEN_KEY) || undefined;
+}
+
+export function getStoredIdentity(): Identity | null {
+  const raw = localStorage.getItem(IDENTITY_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Identity;
+  } catch {
+    return null;
+  }
+}
+
+export function clearAuth(): void {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(IDENTITY_KEY);
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  };
+}
+
+// ── 认证 ──
+export async function login(employeeId: string, password: string): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employeeId, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || '登录失败');
+  }
+  return res.json();
+}
+
+export async function setPassword(
+  employeeId: string,
+  name: string,
+  password: string
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/auth/set-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employeeId, name, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || '设置密码失败');
+  }
+  return res.json();
 }
 
 /**
@@ -27,7 +85,7 @@ export async function sendChatMessage(
 ): Promise<ChatResponse> {
   const res = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(request),
   });
   if (!res.ok) {
@@ -39,9 +97,6 @@ export async function sendChatMessage(
 
 /**
  * 批量评价 — SSE 流式
- * @param onEvent 每收到一个 SSE 事件时的回调
- * @param onComplete 完成时的回调
- * @param onError 出错时的回调
  */
 export function streamEvaluate(
   request: EvaluateRequest,
@@ -53,7 +108,7 @@ export function streamEvaluate(
 
   fetch(`${API_BASE}/evaluate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(request),
     signal: controller.signal,
   })
@@ -112,7 +167,7 @@ export async function getExceptions(
 ): Promise<EvaluationResult[]> {
   const params = status ? `?status=${status}` : '';
   const res = await fetch(`${API_BASE}/exceptions${params}`, {
-    headers: currentEmployeeId ? { 'x-employee-id': currentEmployeeId } : undefined,
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error('获取异常列表失败');
   return res.json();
@@ -128,10 +183,7 @@ export async function handleException(
 ): Promise<any> {
   const res = await fetch(`${API_BASE}/exceptions/${evaluationId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(currentEmployeeId ? { 'x-employee-id': currentEmployeeId } : {}),
-    },
+    headers: authHeaders(),
     body: JSON.stringify({ evaluationId, action, modifiedFeedback }),
   });
   if (!res.ok) {

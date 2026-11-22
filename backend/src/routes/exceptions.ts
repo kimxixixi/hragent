@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getExceptions, updateExceptionStatus } from '../db/queries';
-import { isHR } from './guard';
+import { hrRequired } from '../auth/middleware';
 import type { ExceptionUpdateRequest } from '../types';
 
 const router = Router();
@@ -10,12 +10,8 @@ const router = Router();
  * 获取异常评价列表（HR 专属）
  * Query: ?status=pending|reviewed|dismissed
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', hrRequired, (req: Request, res: Response) => {
   try {
-    if (!isHR(req)) {
-      res.status(403).json({ error: '仅 HR 可访问异常列表' });
-      return;
-    }
     const statusParam = req.query.status;
     const status: string | undefined =
       typeof statusParam === 'string' ? statusParam : undefined;
@@ -31,12 +27,8 @@ router.get('/', (req: Request, res: Response) => {
  * PUT /api/exceptions/:id
  * 处理异常评价（HR 专属）
  */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', hrRequired, (req: Request, res: Response) => {
   try {
-    if (!isHR(req)) {
-      res.status(403).json({ error: '仅 HR 可处理异常' });
-      return;
-    }
     const id = String(req.params.id);
     const body = req.body as ExceptionUpdateRequest;
     const action: string = body.action;

@@ -24,13 +24,14 @@ export function getDB(): Database.Database {
 
 function initializeSchema(db: Database.Database): void {
   db.exec(`
-    -- 员工表（HR 维护档案：部门、角色等）
+    -- 员工表（HR 维护档案：部门、角色、登录密码哈希等）
     -- 主键 employee_id 取「工号」，无工号时用姓名兜底
     CREATE TABLE IF NOT EXISTS employees (
       employee_id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       department TEXT DEFAULT '',
       role TEXT DEFAULT 'employee',
+      password_hash TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -80,6 +81,9 @@ function migrateEmployeesRole(db: Database.Database): void {
   const cols = db.prepare('PRAGMA table_info(employees)').all() as { name: string }[];
   if (!cols.some((c) => c.name === 'role')) {
     db.exec(`ALTER TABLE employees ADD COLUMN role TEXT DEFAULT 'employee'`);
+  }
+  if (!cols.some((c) => c.name === 'password_hash')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN password_hash TEXT`);
   }
 }
 

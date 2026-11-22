@@ -4,15 +4,18 @@ import { InputArea } from './InputArea';
 import { HRPanel } from './HRPanel';
 import { useChat } from '../hooks/useChat';
 import { streamEvaluate } from '../services/api';
-import type { ReflectionInput } from '../types/chat';
+import type { ReflectionInput, Identity } from '../types/chat';
 
-export const ChatView: React.FC = () => {
+interface ChatViewProps {
+  identity: Identity;
+  onLogout: () => void;
+}
+
+export const ChatView: React.FC<ChatViewProps> = ({ identity, onLogout }) => {
   const {
     messages,
     isLoading,
     setIsLoading,
-    employeeInfo,
-    role,
     exceptionCount,
     pendingExceptions,
     resolveException,
@@ -20,9 +23,10 @@ export const ChatView: React.FC = () => {
     handleSSEEvent,
     addMessage,
     messagesEndRef,
-  } = useChat();
+  } = useChat(identity);
 
   const [showHRPanel, setShowHRPanel] = useState(false);
+  const isHR = identity.role === 'hr';
 
   // 自动滚动到底部
   useEffect(() => {
@@ -35,24 +39,12 @@ export const ChatView: React.FC = () => {
   const handleBatchEvaluate = (reflections: ReflectionInput[]) => {
     if (reflections.length === 0) return;
 
-    // 未报到 → 提醒
-    if (!employeeInfo) {
-      addMessage({
-        id: `remind-${Date.now()}`,
-        type: 'system',
-        role: 'agent',
-        content: `⚠️ 请先告诉我你的**姓名和工号**，比如 \`张三 S001\`，然后才能提交心得哦～`,
-        timestamp: new Date().toISOString(),
-      });
-      return;
-    }
-
-    // 自动附带已报到的员工信息
+    // 自动附带登录身份
     const enriched = reflections.map((r) => ({
       ...r,
       trainee: {
-        name: employeeInfo?.name || r.trainee.name,
-        employeeId: employeeInfo?.employeeId || r.trainee.employeeId,
+        name: r.trainee.name || identity.name,
+        employeeId: r.trainee.employeeId || identity.employeeId,
       },
     }));
 
@@ -68,10 +60,8 @@ export const ChatView: React.FC = () => {
       timestamp: new Date().toISOString(),
     });
 
-    // 加载状态
     setIsLoading(true);
 
-    // 启动 SSE 流式评价
     streamEvaluate(
       { reflections: enriched },
       handleSSEEvent,
@@ -99,10 +89,10 @@ export const ChatView: React.FC = () => {
         <div className="chat-header-info">
           <h1 className="chat-header-title">培小评</h1>
           <p className="chat-header-subtitle">
-            你的培训成长伙伴 · 提交心得即可获得反馈
+            {identity.name}（工号 {identity.employeeId}）· {isHR ? 'HR' : '员工'}
           </p>
         </div>
-        {role === 'hr' && (
+        {isHR && (
           <button
             className="hr-notify-btn"
             onClick={() => setShowHRPanel(true)}
@@ -114,6 +104,9 @@ export const ChatView: React.FC = () => {
             )}
           </button>
         )}
+        <button className="logout-btn" onClick={onLogout} title="退出登录">
+          退出
+        </button>
       </div>
 
       {/* 消息列表 */}
@@ -127,7 +120,7 @@ export const ChatView: React.FC = () => {
       />
 
       {/* HR 异常通知面板 */}
-      {showHRPanel && (
+      {showHRPanel && isHR && (
         <HRPanel
           exceptions={pendingExceptions}
           exceptionCount={exceptionCount}

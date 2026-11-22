@@ -1,15 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { evaluateBatch } from '../agent/evaluator';
 import { saveEvaluation } from '../db/queries';
+import { authRequired } from '../auth/middleware';
 import type { EvaluateRequest, ReflectionInput } from '../types';
 
 const router = Router();
 
 /**
  * POST /api/evaluate
- * 批量评价接口 — SSE 流式返回进度
+ * 批量评价接口 — SSE 流式返回进度（需登录）
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authRequired, async (req: Request, res: Response) => {
   const { reflections } = req.body as EvaluateRequest;
 
   if (!reflections || !Array.isArray(reflections) || reflections.length === 0) {
@@ -51,9 +52,9 @@ router.post('/', async (req: Request, res: Response) => {
 
 /**
  * POST /api/evaluate/single
- * 单篇评价（非流式）
+ * 单篇评价（非流式，需登录）
  */
-router.post('/single', async (req: Request, res: Response) => {
+router.post('/single', authRequired, async (req: Request, res: Response) => {
   try {
     const { evaluateReflection } = await import('../agent/evaluator');
     const result = await evaluateReflection(req.body as ReflectionInput);

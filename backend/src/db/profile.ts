@@ -48,6 +48,28 @@ export function ensureEmployee(employeeId: string, name: string): void {
 }
 
 /**
+ * 设置员工登录密码哈希
+ */
+export function setEmployeePassword(employeeId: string, passwordHash: string): void {
+  const db = getDB();
+  db.prepare('UPDATE employees SET password_hash = ? WHERE employee_id = ?').run(passwordHash, employeeId);
+}
+
+/**
+ * 读取员工登录凭证（含密码哈希）
+ */
+export function getEmployeeCredentials(employeeId: string):
+  | { employee_id: string; name: string; role: string; password_hash: string | null }
+  | undefined {
+  const db = getDB();
+  return db
+    .prepare('SELECT employee_id, name, role, password_hash FROM employees WHERE employee_id = ?')
+    .get(employeeId) as
+    | { employee_id: string; name: string; role: string; password_hash: string | null }
+    | undefined;
+}
+
+/**
  * 获取员工学习画像
  * @param employeeId 员工身份键（工号，无工号时用姓名）
  */

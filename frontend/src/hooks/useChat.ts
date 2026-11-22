@@ -1,53 +1,30 @@
 import { useState, useCallback, useRef } from 'react';
-import type { ChatMessage, Role } from '../types/chat';
-import { sendChatMessage, setCurrentEmployeeId } from '../services/api';
+import type { ChatMessage, Identity } from '../types/chat';
+import { sendChatMessage } from '../services/api';
 
 /**
  * 对话状态管理 Hook
+ * 身份由登录态注入（见 App.tsx），不再在此解析报到
  */
-export function useChat() {
+export function useChat(identity: Identity) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       type: 'system',
       role: 'agent',
-      content: `👋 你好，我是培小评～
-
-请先告诉我你的**姓名和工号**，比如：\`张三 S001\``,
+      content: `👋 你好，${identity.name}（工号 ${identity.employeeId}）～
+${
+  identity.role === 'hr'
+    ? '\n你是 HR，可以输入「异常」审核、输入「统计」看概览、输入「画像」看全员。'
+    : '\n直接粘贴你的培训心得，我会给你反馈～'
+}`,
       timestamp: new Date().toISOString(),
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [exceptionCount, setExceptionCount] = useState(0);
   const [pendingExceptions, setPendingExceptions] = useState<any[]>([]);
-  const [employeeInfo, setEmployeeInfo] = useState<{
-    name: string;
-    employeeId: string;
-  } | null>(null);
-  const [role, setRole] = useState<Role>('employee');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // 灵活检测姓名+工号格式
-  const parseEmployeeInfo = useCallback((text: string) => {
-    const t = text.trim();
-    // 匹配: 中文名(2-4字) + 分隔符(空格/逗号/冒号/无) + 工号(数字或字母数字2-10位)
-    const patterns = [
-      /^([一-鿿]{2,4})[\s,，：:]+([A-Za-z0-9\-]{2,10})$/,
-      /^([一-鿿]{2,4})(\d{3,8})$/,
-      /^([A-Za-z0-9\-]{2,10})[\s,，：:]+([一-鿿]{2,4})$/,
-      /^(\d{3,8})\s*[\s,，：:]?\s*([一-鿿]{2,4})$/,
-    ];
-    for (const p of patterns) {
-      const m = t.match(p);
-      if (m) {
-        const a = m[1], b = m[2];
-        return /[一-鿿]/.test(a)
-          ? { name: a, employeeId: b }
-          : { name: b, employeeId: a };
-      }
-    }
-    return null;
-  }, []);
 
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
@@ -93,7 +70,7 @@ export function useChat() {
   }, []);
 
   /**
-   * 发送文本消息（含员工报到检测）
+   * 发送文本消息
    */
   const sendMessage = useCallback(
     async (text: string) => {
@@ -128,55 +105,10 @@ export function useChat() {
       };
       addMessage(userMsg);
 
-      // 检测是否在报到（输入姓名工号）
-      if (!employeeInfo) {
-        const info = parseEmployeeInfo(text);
-        if (info) {
-          setIsLoading(true);
-          try {
-            // 报到消息发给后端，由后端解析身份 + 查角色
-            const response = await sendChatMessage({ message: text });
-            if (response.identity) {
-              setEmployeeInfo({
-                name: response.identity.name,
-                employeeId: response.identity.employeeId,
-              });
-              setRole(response.identity.role);
-              setCurrentEmployeeId(response.identity.employeeId);
-            }
-            if (response.messages && response.messages.length > 0) {
-              addMessages(response.messages);
-            } else {
-              addMessage({
-                id: `confirm-${Date.now()}`,
-                type: 'system',
-                role: 'agent',
-                content: `✅ 已记住！**${info.name}**（工号 ${info.employeeId}），现在可以提交你的培训心得了～`,
-                timestamp: new Date().toISOString(),
-              });
-            }
-          } catch (err: any) {
-            addMessage({
-              id: `error-${Date.now()}`,
-              type: 'system',
-              role: 'system',
-              content: `❌ 处理失败：${err.message}`,
-              timestamp: new Date().toISOString(),
-            });
-          } finally {
-            setIsLoading(false);
-          }
-          return;
-        }
-      }
-
       setIsLoading(true);
 
       try {
-        const response = await sendChatMessage({
-          message: text,
-          employeeId: employeeInfo?.employeeId,
-        });
+        const response = await sendChatMessage({ message: text });
         if (response.messages) {
           addMessages(response.messages);
         }
@@ -192,7 +124,7 @@ export function useChat() {
         setIsLoading(false);
       }
     },
-    [addMessage, addMessages, employeeInfo, parseEmployeeInfo]
+    [addMessage, addMessages]
   );
 
   /**
@@ -204,11 +136,9 @@ export function useChat() {
         upsertProgress(event.total, event.completed, event.currentTrainee || '');
       } else if (event.type === 'result' && event.result) {
         const r = event.result;
-        // 更新进度条
         upsertProgress(event.total, event.completed, event.currentTrainee || '');
 
         if (r.isException) {
-          // 异常 → 员工只看到确认消息，不展示评价卡片
           addMessage({
             id: r.id,
             type: 'text',
@@ -216,11 +146,9 @@ export function useChat() {
             content: `📝 你的心得已收到！HR 正在复核中，稍后会将反馈发送给你～`,
             timestamp: new Date().toISOString(),
           });
-          // HR 通知计数
           setExceptionCount((c) => c + 1);
           setPendingExceptions((prev) => [...prev, r]);
         } else {
-          // 正常 → 员工直接看到完整反馈
           addMessage({
             id: r.id,
             type: 'evaluation_card',
@@ -241,41 +169,40 @@ export function useChat() {
     setMessages([]);
   }, []);
 
-  const resolveException = useCallback((evalId: string, customFeedback?: string) => {
-    const ex = pendingExceptions.find((e) => e.id === evalId);
-    setPendingExceptions((prev) => prev.filter((e) => e.id !== evalId));
-    setExceptionCount((c) => Math.max(0, c - 1));
+  const resolveException = useCallback(
+    (evalId: string, customFeedback?: string) => {
+      const ex = pendingExceptions.find((e) => e.id === evalId);
+      setPendingExceptions((prev) => prev.filter((e) => e.id !== evalId));
+      setExceptionCount((c) => Math.max(0, c - 1));
 
-    if (!ex) return;
+      if (!ex) return;
 
-    if (customFeedback) {
-      // HR 驳回并编辑 → 员工看到 HR 写的反馈
-      addMessage({
-        id: `hr-feedback-${Date.now()}`,
-        type: 'text',
-        role: 'agent',
-        content: customFeedback,
-        timestamp: new Date().toISOString(),
-      });
-    } else {
-      // HR 直接通过 → 员工看到 AI 评价卡片（和正常高分流程一样）
-      addMessage({
-        id: ex.id,
-        type: 'evaluation_card',
-        role: 'agent',
-        content: `✅ 你的心得评价出来啦！总分 **${ex.totalScore}分**，下面是详细反馈～`,
-        payload: ex,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }, [addMessage, pendingExceptions]);
+      if (customFeedback) {
+        addMessage({
+          id: `hr-feedback-${Date.now()}`,
+          type: 'text',
+          role: 'agent',
+          content: customFeedback,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        addMessage({
+          id: ex.id,
+          type: 'evaluation_card',
+          role: 'agent',
+          content: `✅ 你的心得评价出来啦！总分 **${ex.totalScore}分**，下面是详细反馈～`,
+          payload: ex,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    },
+    [addMessage, pendingExceptions]
+  );
 
   return {
     messages,
     isLoading,
     setIsLoading,
-    employeeInfo,
-    role,
     exceptionCount,
     pendingExceptions,
     resolveException,

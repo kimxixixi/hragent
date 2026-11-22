@@ -96,3 +96,9 @@ export interface ChatResponse {
   messages: ChatMessage[];
   identity?: Identity;
 }
+
+// ── 认证 ──
+export interface LoginResponse {
+  token: string;
+  identity: Identity;
+}

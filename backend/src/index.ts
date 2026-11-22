@@ -8,6 +8,7 @@ import chatRouter from './routes/chat';
 import evaluateRouter from './routes/evaluate';
 import exceptionsRouter from './routes/exceptions';
 import employeesRouter from './routes/employees';
+import authRouter from './routes/auth';
 import uploadRouter from './routes/upload';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/chat', chatRouter);
 app.use('/api/evaluate', evaluateRouter);
 app.use('/api/exceptions', exceptionsRouter);
 app.use('/api/employees', employeesRouter);
+app.use('/api/auth', authRouter);
 app.use('/api/upload', uploadRouter);
 
 // ── 健康检查 ──

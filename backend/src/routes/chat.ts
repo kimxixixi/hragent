@@ -1,50 +1,32 @@
 import { Router, Request, Response } from 'express';
 import { evaluateReflection } from '../agent/evaluator';
 import { getStats, getRecentEvaluations, getExceptions } from '../db/queries';
-import {
-  getEmployeeProfile,
-  getEmployeeRole,
-  ensureEmployee,
-  listEmployees,
-} from '../db/profile';
-import { parseIdentity } from '../util/identity';
+import { getEmployeeProfile, listEmployees } from '../db/profile';
+import { authRequired, getAuth } from '../auth/middleware';
 import type { ChatMessage, ChatRequest, ReflectionInput, Role } from '../types';
 import { v4 } from '../agent/uuid';
 
 const router = Router();
 
 interface ChatContext {
-  /** 已识别身份（姓名 + 工号） */
-  identity: { name: string; employeeId: string } | null;
+  identity: { name: string; employeeId: string };
   role: Role;
-  /** 本次消息本身就是"姓名 工号"（报到），而非从请求携带的工号反查 */
-  isOnboarding: boolean;
 }
 
 /**
  * POST /api/chat
- * 对话式交互入口，按角色分流能力：
+ * 对话式交互入口（需登录），按角色分流能力：
  *   - 员工：提交心得、查看自己的历史/画像
  *   - HR：审核异常、看统计、看全员画像
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authRequired, async (req: Request, res: Response) => {
   try {
-    const { message, attachments, employeeId } = req.body as ChatRequest;
-
-    // 身份解析：优先取请求携带的工号，其次从消息文本解析（报到场景）
-    const parsed = parseIdentity(message || '');
-    let identity = parsed;
-    if (!identity && employeeId) {
-      // 后续消息没带姓名，从档案反查姓名
-      const profile = getEmployeeProfile(employeeId);
-      identity = { name: profile.name || employeeId, employeeId };
-    }
-    if (parsed) {
-      ensureEmployee(parsed.employeeId, parsed.name);
-    }
-
-    const role: Role = identity ? getEmployeeRole(identity.employeeId) : 'employee';
-    const ctx: ChatContext = { identity, role, isOnboarding: !!parsed };
+    const { message, attachments } = req.body as ChatRequest;
+    const auth = getAuth(req)!;
+    const ctx: ChatContext = {
+      identity: { name: auth.name, employeeId: auth.employeeId },
+      role: auth.role,
+    };
 
     // 有附件 = 提交心得评价（员工与 HR 均可）
     if (attachments && attachments.length > 0) {
@@ -74,19 +56,13 @@ router.post('/', async (req: Request, res: Response) => {
         })),
       ];
 
-      res.json({
-        messages: replyMessages,
-        identity: identity ? { ...identity, role } : undefined,
-      });
+      res.json({ messages: replyMessages });
       return;
     }
 
     // 无附件 = 意图识别 + 角色分流
-    const reply = await handleNaturalLanguage(message || '', ctx);
-    res.json({
-      messages: reply.messages,
-      identity: identity ? { ...identity, role } : undefined,
-    });
+    const reply = handleNaturalLanguage(message || '', ctx);
+    res.json({ messages: reply.messages });
   } catch (err: any) {
     console.error('Chat error:', err);
     res.status(500).json({
@@ -106,18 +82,13 @@ router.post('/', async (req: Request, res: Response) => {
 /**
  * 自然语言意图识别 + 角色分流
  */
-async function handleNaturalLanguage(
+function handleNaturalLanguage(
   message: string,
   ctx: ChatContext
-): Promise<{ messages: ChatMessage[] }> {
+): { messages: ChatMessage[] } {
   const msg = message.toLowerCase();
   const now = new Date().toISOString();
-  const { identity, role, isOnboarding } = ctx;
-
-  // 报到：本次消息本身就是"姓名 工号"
-  if (isOnboarding && identity) {
-    return { messages: [welcome(identity, role, now)] };
-  }
+  const { identity, role } = ctx;
 
   // ── 统计（HR 专属）──
   if (
@@ -137,15 +108,13 @@ async function handleNaturalLanguage(
   // ── 最近 / 历史：HR 看全部，员工看自己的 ──
   if (msg.includes('最近') || msg.includes('历史') || msg.includes('查看')) {
     if (role === 'hr') return { messages: [recentAllMessage(now)] };
-    if (identity) return { messages: [recentMineMessage(identity, now)] };
-    return { messages: [askOnboard(now)] };
+    return { messages: [recentMineMessage(identity, now)] };
   }
 
   // ── 画像：HR 看全员（或指定某人），员工看自己 ──
   if (msg.includes('画像') || msg.includes('趋势') || msg.includes('薄弱')) {
     if (role === 'hr') return { messages: profileHRMessage(message, now) };
-    if (identity) return { messages: [profileMineMessage(identity, now)] };
-    return { messages: [askOnboard(now)] };
+    return { messages: [profileMineMessage(identity, now)] };
   }
 
   // ── 默认：角色化帮助 ──
@@ -154,40 +123,17 @@ async function handleNaturalLanguage(
 
 // ── 消息构造 ────────────────────────────────────────────────
 
-function welcome(identity: { name: string; employeeId: string }, role: Role, now: string): ChatMessage {
-  if (role === 'hr') {
-    return {
-      id: v4(), type: 'system', role: 'agent',
-      content: `✅ 已识别：**${identity.name}**（工号 ${identity.employeeId}）· **HR**\n\n你可以：\n- 输入「异常」查看并审核待复核评价\n- 输入「统计」看全量评分概览\n- 输入「画像」看全员学习画像`,
-      timestamp: now,
-    };
-  }
-  return {
-    id: v4(), type: 'system', role: 'agent',
-    content: `✅ 已记住！**${identity.name}**（工号 ${identity.employeeId}），现在可以直接粘贴你的培训心得，我会给你反馈～\n\n也可以输入「我的画像」或「最近」查看自己的历史记录。`,
-    timestamp: now,
-  };
-}
-
 function help(role: Role, now: string): ChatMessage {
   if (role === 'hr') {
     return {
       id: v4(), type: 'text', role: 'agent',
-      content: `👋 你好，HR～\n\n- 输入「异常」审核待复核评价\n- 输入「统计」看评分概览\n- 输入「画像」看全员学习画像`,
+      content: `👋 你好，HR～\n\n- 输入「异常」审核待复核评价\n- 输入「统计」看评分概览\n- 输入「画像」看全员学习画像\n\n也可以直接粘贴心得进行评价。`,
       timestamp: now,
     };
   }
   return {
     id: v4(), type: 'text', role: 'agent',
-    content: `👋 你好，我是培小评～\n\n先告诉我你的**姓名和工号**（比如 \`张三 S001\`），然后直接粘贴培训心得，我就会给你反馈～`,
-    timestamp: now,
-  };
-}
-
-function askOnboard(now: string): ChatMessage {
-  return {
-    id: v4(), type: 'text', role: 'agent',
-    content: `请先告诉我你的**姓名和工号**（比如 \`张三 S001\`），我才能帮你查记录哦～`,
+    content: `👋 你好，直接粘贴你的培训心得，我会给你反馈～\n\n也可以输入「我的画像」或「最近」查看自己的记录。`,
     timestamp: now,
   };
 }
@@ -267,7 +213,6 @@ function profileMineMessage(identity: { name: string; employeeId: string }, now:
 }
 
 function profileHRMessage(message: string, now: string): ChatMessage[] {
-  // 尝试从消息里找具体工号/姓名
   const idMatch = message.match(/[A-Za-z0-9\-]{2,10}/);
   const target = idMatch ? idMatch[0] : null;
 
