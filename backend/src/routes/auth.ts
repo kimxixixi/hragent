@@ -2,7 +2,16 @@ import { Router, Request, Response } from 'express';
 import { hashPassword, verifyPassword } from '../auth/password';
 import { signToken } from '../auth/token';
 import { authRequired, getAuth } from '../auth/middleware';
-import { getEmployeeCredentials, setEmployeePassword, ensureEmployee } from '../db/profile';
+import { checkRateLimit } from '../auth/rateLimit';
+import {
+  getEmployeeCredentials,
+  setEmployeePassword,
+  ensureEmployee,
+  recordLoginFailure,
+  resetLoginFailure,
+  LOGIN_MAX_ATTEMPTS,
+  LOGIN_LOCK_MINUTES,
+} from '../db/profile';
 import type { Role } from '../types';
 
 const router = Router();
@@ -55,15 +64,41 @@ router.post('/login', (req: Request, res: Response) => {
       return;
     }
 
+    // 1. IP 限流：防单 IP 暴力枚举
+    const rl = checkRateLimit(`login:${req.ip}`);
+    if (!rl.allowed) {
+      res.status(429).json({ error: `尝试过于频繁，请 ${rl.retryAfterSec} 秒后再试` });
+      return;
+    }
+
     const emp = getEmployeeCredentials(employeeId);
     if (!emp || !emp.password_hash) {
       res.status(401).json({ error: '工号不存在或尚未设置密码' });
       return;
     }
-    if (!verifyPassword(String(password), emp.password_hash)) {
-      res.status(401).json({ error: '密码错误' });
+
+    // 2. 账号锁定：连续失败达上限后锁定一段时间
+    if (emp.locked_until && new Date(emp.locked_until).getTime() > Date.now()) {
+      const remainMin = Math.max(1, Math.ceil((new Date(emp.locked_until).getTime() - Date.now()) / 60000));
+      res.status(423).json({ error: `账号已锁定，请 ${remainMin} 分钟后再试` });
       return;
     }
+
+    // 3. 密码校验
+    if (!verifyPassword(String(password), emp.password_hash)) {
+      const result = recordLoginFailure(employeeId);
+      if (result.locked) {
+        res.status(423).json({
+          error: `密码连续错误 ${LOGIN_MAX_ATTEMPTS} 次，账号已锁定 ${LOGIN_LOCK_MINUTES} 分钟`,
+        });
+      } else {
+        res.status(401).json({ error: '密码错误' });
+      }
+      return;
+    }
+
+    // 成功：清零失败计数与锁定
+    resetLoginFailure(employeeId);
 
     const role: Role = emp.role === 'hr' ? 'hr' : 'employee';
     const identity = { name: emp.name, employeeId: emp.employee_id, role };

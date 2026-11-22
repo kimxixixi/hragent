@@ -56,17 +56,67 @@ export function setEmployeePassword(employeeId: string, passwordHash: string): v
 }
 
 /**
- * 读取员工登录凭证（含密码哈希）
+ * 读取员工登录凭证（含密码哈希与锁定状态）
  */
 export function getEmployeeCredentials(employeeId: string):
-  | { employee_id: string; name: string; role: string; password_hash: string | null }
+  | {
+      employee_id: string;
+      name: string;
+      role: string;
+      password_hash: string | null;
+      failed_attempts: number;
+      locked_until: string | null;
+    }
   | undefined {
   const db = getDB();
   return db
-    .prepare('SELECT employee_id, name, role, password_hash FROM employees WHERE employee_id = ?')
+    .prepare(
+      'SELECT employee_id, name, role, password_hash, failed_attempts, locked_until FROM employees WHERE employee_id = ?'
+    )
     .get(employeeId) as
-    | { employee_id: string; name: string; role: string; password_hash: string | null }
+    | {
+        employee_id: string;
+        name: string;
+        role: string;
+        password_hash: string | null;
+        failed_attempts: number;
+        locked_until: string | null;
+      }
     | undefined;
+}
+
+// ── 登录防暴力破解 ──────────────────────────────────────────
+
+export const LOGIN_MAX_ATTEMPTS = 5;        // 连续失败次数上限
+export const LOGIN_LOCK_MINUTES = 15;       // 锁定时长（分钟）
+const LOGIN_LOCK_MS = LOGIN_LOCK_MINUTES * 60 * 1000;
+
+/**
+ * 记录一次登录失败：累加计数，达到上限则锁定
+ */
+export function recordLoginFailure(employeeId: string): { locked: boolean; lockedUntil: string | null } {
+  const db = getDB();
+  const row = db
+    .prepare('SELECT failed_attempts FROM employees WHERE employee_id = ?')
+    .get(employeeId) as { failed_attempts: number } | undefined;
+  const next = (row?.failed_attempts ?? 0) + 1;
+
+  if (next >= LOGIN_MAX_ATTEMPTS) {
+    const until = new Date(Date.now() + LOGIN_LOCK_MS).toISOString();
+    db.prepare('UPDATE employees SET failed_attempts = 0, locked_until = ? WHERE employee_id = ?').run(until, employeeId);
+    return { locked: true, lockedUntil: until };
+  }
+
+  db.prepare('UPDATE employees SET failed_attempts = ? WHERE employee_id = ?').run(next, employeeId);
+  return { locked: false, lockedUntil: null };
+}
+
+/**
+ * 登录成功后清零失败计数与锁定
+ */
+export function resetLoginFailure(employeeId: string): void {
+  const db = getDB();
+  db.prepare('UPDATE employees SET failed_attempts = 0, locked_until = NULL WHERE employee_id = ?').run(employeeId);
 }
 
 /**

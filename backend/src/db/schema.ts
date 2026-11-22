@@ -32,6 +32,8 @@ function initializeSchema(db: Database.Database): void {
       department TEXT DEFAULT '',
       role TEXT DEFAULT 'employee',
       password_hash TEXT,
+      failed_attempts INTEGER DEFAULT 0,
+      locked_until TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -84,6 +86,12 @@ function migrateEmployeesRole(db: Database.Database): void {
   }
   if (!cols.some((c) => c.name === 'password_hash')) {
     db.exec(`ALTER TABLE employees ADD COLUMN password_hash TEXT`);
+  }
+  if (!cols.some((c) => c.name === 'failed_attempts')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN failed_attempts INTEGER DEFAULT 0`);
+  }
+  if (!cols.some((c) => c.name === 'locked_until')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN locked_until TEXT`);
   }
 }
 
