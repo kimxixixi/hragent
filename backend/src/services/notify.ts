@@ -18,6 +18,12 @@ import type { EvaluationResult } from '../types';
  * 发送异常通知给 HR
  */
 export async function notifyHRException(result: EvaluationResult): Promise<boolean> {
+  // 评测/离线批处理模式：跳过真实推送，避免低分样例触发邮件轰炸
+  if (process.env.NOTIFY_DISABLED === '1' || process.env.NOTIFY_DISABLED === 'true') {
+    console.log('[通知] 已禁用（评测/离线模式）');
+    return false;
+  }
+
   const content = buildContent(result);
 
   // 1. QQ邮箱（免费，首选）

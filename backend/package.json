@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "kb:build": "tsx src/knowledge/build.ts"
+    "kb:build": "tsx src/knowledge/build.ts",
+    "eval": "tsx src/eval/run.ts"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.7.5",
