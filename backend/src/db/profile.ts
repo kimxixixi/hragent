@@ -10,10 +10,42 @@ import type {
   ScoreTrend,
   DimensionScore,
   EvaluationRow,
+  Role,
 } from '../types';
 
 // 10 分制下，维度历史均分低于该阈值视为"薄弱"
 const WEAK_THRESHOLD = 6;
+
+/**
+ * 获取员工角色（默认 employee）
+ */
+export function getEmployeeRole(employeeId: string): Role {
+  const db = getDB();
+  const row = db
+    .prepare('SELECT role FROM employees WHERE employee_id = ?')
+    .get(employeeId) as { role: string } | undefined;
+  return row?.role === 'hr' ? 'hr' : 'employee';
+}
+
+/**
+ * 设置员工角色（HR 操作 / 引导）
+ */
+export function setEmployeeRole(employeeId: string, role: Role): void {
+  const db = getDB();
+  db.prepare('UPDATE employees SET role = ? WHERE employee_id = ?').run(role, employeeId);
+}
+
+/**
+ * 报到登记：确保员工存在于档案（默认 employee 角色）
+ */
+export function ensureEmployee(employeeId: string, name: string): void {
+  const db = getDB();
+  db.prepare(
+    `INSERT INTO employees (employee_id, name, department, role, created_at)
+     VALUES (?, ?, '', 'employee', ?)
+     ON CONFLICT(employee_id) DO UPDATE SET name = excluded.name`
+  ).run(employeeId, name, new Date().toISOString());
+}
 
 /**
  * 获取员工学习画像
@@ -25,7 +57,7 @@ export function getEmployeeProfile(employeeId: string): EmployeeProfile {
   const emp = db
     .prepare('SELECT * FROM employees WHERE employee_id = ?')
     .get(employeeId) as
-    | { employee_id: string; name: string; department: string; created_at: string }
+    | { employee_id: string; name: string; department: string; role: string; created_at: string }
     | undefined;
 
   // 该员工全部评价，按时间升序
@@ -38,6 +70,7 @@ export function getEmployeeProfile(employeeId: string): EmployeeProfile {
       employeeId,
       name: emp?.name || employeeId,
       department: emp?.department || '',
+      role: emp?.role === 'hr' ? 'hr' : 'employee',
       evaluationCount: 0,
       averageScore: 0,
       trend: 'first_time',
@@ -91,6 +124,7 @@ export function getEmployeeProfile(employeeId: string): EmployeeProfile {
     employeeId,
     name: emp?.name || rows[0].trainee_name,
     department: emp?.department || '',
+    role: emp?.role === 'hr' ? 'hr' : 'employee',
     evaluationCount: rows.length,
     averageScore,
     trend,
@@ -111,9 +145,9 @@ export function updateEmployeeDepartment(employeeId: string, department: string)
 /**
  * 列出全部员工档案
  */
-export function listEmployees(): { employee_id: string; name: string; department: string; created_at: string }[] {
+export function listEmployees(): { employee_id: string; name: string; department: string; role: string; created_at: string }[] {
   const db = getDB();
   return db
-    .prepare('SELECT employee_id, name, department, created_at FROM employees ORDER BY created_at DESC')
-    .all() as { employee_id: string; name: string; department: string; created_at: string }[];
+    .prepare('SELECT employee_id, name, department, role, created_at FROM employees ORDER BY created_at DESC')
+    .all() as { employee_id: string; name: string; department: string; role: string; created_at: string }[];
 }

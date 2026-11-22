@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import type { ChatMessage } from '../types/chat';
-import { sendChatMessage } from '../services/api';
+import type { ChatMessage, Role } from '../types/chat';
+import { sendChatMessage, setCurrentEmployeeId } from '../services/api';
 
 /**
  * 对话状态管理 Hook
@@ -24,6 +24,7 @@ export function useChat() {
     name: string;
     employeeId: string;
   } | null>(null);
+  const [role, setRole] = useState<Role>('employee');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 灵活检测姓名+工号格式
@@ -131,14 +132,40 @@ export function useChat() {
       if (!employeeInfo) {
         const info = parseEmployeeInfo(text);
         if (info) {
-          setEmployeeInfo(info);
-          addMessage({
-            id: `confirm-${Date.now()}`,
-            type: 'system',
-            role: 'agent',
-            content: `✅ 已记住！**${info.name}**（工号 ${info.employeeId}），现在可以提交你的培训心得了～`,
-            timestamp: new Date().toISOString(),
-          });
+          setIsLoading(true);
+          try {
+            // 报到消息发给后端，由后端解析身份 + 查角色
+            const response = await sendChatMessage({ message: text });
+            if (response.identity) {
+              setEmployeeInfo({
+                name: response.identity.name,
+                employeeId: response.identity.employeeId,
+              });
+              setRole(response.identity.role);
+              setCurrentEmployeeId(response.identity.employeeId);
+            }
+            if (response.messages && response.messages.length > 0) {
+              addMessages(response.messages);
+            } else {
+              addMessage({
+                id: `confirm-${Date.now()}`,
+                type: 'system',
+                role: 'agent',
+                content: `✅ 已记住！**${info.name}**（工号 ${info.employeeId}），现在可以提交你的培训心得了～`,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          } catch (err: any) {
+            addMessage({
+              id: `error-${Date.now()}`,
+              type: 'system',
+              role: 'system',
+              content: `❌ 处理失败：${err.message}`,
+              timestamp: new Date().toISOString(),
+            });
+          } finally {
+            setIsLoading(false);
+          }
           return;
         }
       }
@@ -146,7 +173,10 @@ export function useChat() {
       setIsLoading(true);
 
       try {
-        const response = await sendChatMessage({ message: text });
+        const response = await sendChatMessage({
+          message: text,
+          employeeId: employeeInfo?.employeeId,
+        });
         if (response.messages) {
           addMessages(response.messages);
         }
@@ -245,6 +275,7 @@ export function useChat() {
     isLoading,
     setIsLoading,
     employeeInfo,
+    role,
     exceptionCount,
     pendingExceptions,
     resolveException,

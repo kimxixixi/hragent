@@ -72,10 +72,20 @@ export interface ReflectionInput {
   trainingType?: string;
 }
 
+// ── 角色 ──
+export type Role = 'hr' | 'employee';
+
+export interface Identity {
+  name: string;
+  employeeId: string;
+  role: Role;
+}
+
 // ── API 请求/响应 ──
 export interface ChatRequest {
   message: string;
   attachments?: ReflectionInput[];
+  employeeId?: string;
 }
 
 export interface EvaluateRequest {
@@ -84,4 +94,5 @@ export interface EvaluateRequest {
 
 export interface ChatResponse {
   messages: ChatMessage[];
+  identity?: Identity;
 }

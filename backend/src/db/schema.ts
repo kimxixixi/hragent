@@ -24,12 +24,13 @@ export function getDB(): Database.Database {
 
 function initializeSchema(db: Database.Database): void {
   db.exec(`
-    -- 员工表（HR 维护档案：部门等）
+    -- 员工表（HR 维护档案：部门、角色等）
     -- 主键 employee_id 取「工号」，无工号时用姓名兜底
     CREATE TABLE IF NOT EXISTS employees (
       employee_id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       department TEXT DEFAULT '',
+      role TEXT DEFAULT 'employee',
       created_at TEXT NOT NULL
     );
 
@@ -68,6 +69,34 @@ function initializeSchema(db: Database.Database): void {
 
   backfillEmployees(db);
   backfillTrainings(db);
+  migrateEmployeesRole(db);
+  seedHRRoles(db);
+}
+
+/**
+ * 迁移：老库的 employees 表可能没有 role 列，补上（默认 employee）
+ */
+function migrateEmployeesRole(db: Database.Database): void {
+  const cols = db.prepare('PRAGMA table_info(employees)').all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'role')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN role TEXT DEFAULT 'employee'`);
+  }
+}
+
+/**
+ * 引导：从 HR_EMPLOYEE_IDS（逗号分隔工号）标记 HR 角色
+ */
+function seedHRRoles(db: Database.Database): void {
+  const ids = (process.env.HR_EMPLOYEE_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (ids.length === 0) return;
+
+  const stmt = db.prepare('UPDATE employees SET role = ? WHERE employee_id = ?');
+  for (const id of ids) {
+    stmt.run('hr', id);
+  }
 }
 
 /**

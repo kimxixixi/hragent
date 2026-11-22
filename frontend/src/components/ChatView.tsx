@@ -12,6 +12,7 @@ export const ChatView: React.FC = () => {
     isLoading,
     setIsLoading,
     employeeInfo,
+    role,
     exceptionCount,
     pendingExceptions,
     resolveException,
@@ -101,16 +102,18 @@ export const ChatView: React.FC = () => {
             你的培训成长伙伴 · 提交心得即可获得反馈
           </p>
         </div>
-        <button
-          className="hr-notify-btn"
-          onClick={() => setShowHRPanel(true)}
-          title="HR 异常通知"
-        >
-          🔔
-          {exceptionCount > 0 && (
-            <span className="hr-notify-dot">{exceptionCount}</span>
-          )}
-        </button>
+        {role === 'hr' && (
+          <button
+            className="hr-notify-btn"
+            onClick={() => setShowHRPanel(true)}
+            title="HR 异常通知"
+          >
+            🔔
+            {exceptionCount > 0 && (
+              <span className="hr-notify-dot">{exceptionCount}</span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* 消息列表 */}

@@ -8,6 +8,17 @@ import type {
 
 const API_BASE = '/api';
 
+// 当前报到身份（内存态，随页面刷新重置；用于给 HR 专属接口带上工号）
+let currentEmployeeId: string | undefined;
+
+export function setCurrentEmployeeId(id: string | undefined) {
+  currentEmployeeId = id;
+}
+
+export function getCurrentEmployeeId(): string | undefined {
+  return currentEmployeeId;
+}
+
 /**
  * 发送对话消息
  */
@@ -100,7 +111,9 @@ export async function getExceptions(
   status?: string
 ): Promise<EvaluationResult[]> {
   const params = status ? `?status=${status}` : '';
-  const res = await fetch(`${API_BASE}/exceptions${params}`);
+  const res = await fetch(`${API_BASE}/exceptions${params}`, {
+    headers: currentEmployeeId ? { 'x-employee-id': currentEmployeeId } : undefined,
+  });
   if (!res.ok) throw new Error('获取异常列表失败');
   return res.json();
 }
@@ -115,7 +128,10 @@ export async function handleException(
 ): Promise<any> {
   const res = await fetch(`${API_BASE}/exceptions/${evaluationId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(currentEmployeeId ? { 'x-employee-id': currentEmployeeId } : {}),
+    },
     body: JSON.stringify({ evaluationId, action, modifiedFeedback }),
   });
   if (!res.ok) {

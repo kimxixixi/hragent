@@ -82,6 +82,8 @@ export interface ExceptionInfo {
 export interface ChatRequest {
   message: string;
   attachments?: ReflectionInput[];
+  /** 已报到员工的工号（前端携带，供后端解析角色；报到消息也可由后端从文本解析） */
+  employeeId?: string;
 }
 
 export interface EvaluateRequest {
@@ -115,6 +117,9 @@ export interface EvaluationRow {
 // ── 员工学习画像 ──
 export type ScoreTrend = 'first_time' | 'rising' | 'declining' | 'stable';
 
+// ── 角色 ──
+export type Role = 'hr' | 'employee';
+
 export interface DimensionAverage {
   name: string;   // 维度内部名（content_completeness 等）
   label: string;  // 维度标签（内容完整性 等）
@@ -125,6 +130,7 @@ export interface EmployeeProfile {
   employeeId: string;
   name: string;
   department: string;
+  role: Role;
   evaluationCount: number;
   averageScore: number;
   trend: ScoreTrend;
