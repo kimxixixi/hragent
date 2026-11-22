@@ -1,6 +1,36 @@
 import { getDB } from './schema';
 import type { EvaluationResult, EvaluationRow } from '../types';
 
+/**
+ * 员工主键：有工号用工号，无工号用姓名兜底
+ */
+export function resolveEmployeeKey(trainee: { name: string; employeeId?: string }): string {
+  return trainee.employeeId || trainee.name;
+}
+
+/**
+ * 保存评价时同步 upsert 员工与课程档案
+ * 员工 department 默认空，由 HR 后续维护
+ */
+function upsertEmployee(result: EvaluationResult): void {
+  const db = getDB();
+  const key = resolveEmployeeKey(result.trainee);
+  db.prepare(
+    `INSERT INTO employees (employee_id, name, department, created_at)
+     VALUES (?, ?, '', ?)
+     ON CONFLICT(employee_id) DO UPDATE SET name = excluded.name`
+  ).run(key, result.trainee.name, result.createdAt);
+}
+
+function upsertTraining(result: EvaluationResult): void {
+  const db = getDB();
+  db.prepare(
+    `INSERT INTO trainings (title, type, created_at)
+     VALUES (?, '', ?)
+     ON CONFLICT(title) DO NOTHING`
+  ).run(result.trainingTitle, result.createdAt);
+}
+
 export function saveEvaluation(result: EvaluationResult): void {
   const db = getDB();
   const stmt = db.prepare(`
@@ -17,7 +47,7 @@ export function saveEvaluation(result: EvaluationResult): void {
   stmt.run({
     id: result.id,
     trainee_name: result.trainee.name,
-    employee_id: result.trainee.employeeId || '',
+    employee_id: resolveEmployeeKey(result.trainee),
     training_title: result.trainingTitle,
     content: result.content,
     total_score: result.totalScore,
@@ -30,6 +60,9 @@ export function saveEvaluation(result: EvaluationResult): void {
     exception_status: result.isException ? 'pending' : null,
     created_at: result.createdAt,
   });
+
+  upsertEmployee(result);
+  upsertTraining(result);
 }
 
 export function getExceptions(status?: string): EvaluationResult[] {

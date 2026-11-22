@@ -1,8 +1,8 @@
 /**
  * LangGraph 多 Agent 评价图
- * 用 StateGraph 替换原固定管线，拆分为 6 个节点 + Reflection 回边
+ * 用 StateGraph 替换原固定管线，拆分为 7 个节点 + Reflection 回边
  *
- * 流程：解析 → 检索(RAG) → 评分 → 语气安全 → Reviewer 自审 → 组装结果
+ * 流程：解析 → 检索(RAG) → 画像 → 评分 → 语气安全 → Reviewer 自审 → 组装结果
  *       Reviewer 未通过时回退到评分重评（最多一次）
  */
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
@@ -13,8 +13,9 @@ import { determineToneLevel, shouldFlagException } from './toneEngine';
 import { safetyCheck, sanitizeFeedback } from './safetyFilter';
 import { notifyHRException } from '../services/notify';
 import { buildQuery, retrieveKnowledge } from '../knowledge/retrieve';
+import { getEmployeeProfile } from '../db/profile';
 import type { EvaluationState, ParseContext, RawScore, ReviewResult } from './state';
-import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel } from '../types';
+import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel, EmployeeProfile } from '../types';
 
 // ── State 定义 ──────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ const State = Annotation.Root({
   input: Annotation<ReflectionInput>(),
   context: Annotation<ParseContext | undefined>(),
   retrievedChunks: Annotation<EvaluationState['retrievedChunks']>(),
+  profile: Annotation<EmployeeProfile | undefined>(),
   rawScore: Annotation<RawScore | undefined>(),
   tone: Annotation<ToneLevel | undefined>(),
   feedbackSummary: Annotation<string | undefined>(),
@@ -85,7 +87,20 @@ async function retrieveAgent(state: GraphState): Promise<Partial<EvaluationState
   }
 }
 
-// ── 节点 3：评分 Agent ──────────────────────────────────────
+// ── 节点 3：画像（纯规则，读学习画像）────────────────────────
+
+function profileAgent(state: GraphState): Partial<EvaluationState> {
+  const trainee = state.input.trainee;
+  const key = trainee.employeeId || trainee.name;
+  const profile = getEmployeeProfile(key);
+  console.log(
+    `[画像] ${profile.name}：${profile.evaluationCount} 次评价` +
+      (profile.evaluationCount > 0 ? `，均分 ${profile.averageScore}，趋势 ${profile.trend}` : '（首次）')
+  );
+  return { profile };
+}
+
+// ── 节点 4：评分 Agent ──────────────────────────────────────
 
 async function scoreAgent(state: GraphState): Promise<Partial<EvaluationState>> {
   const { system, user } = buildScoreMessages(
@@ -93,7 +108,8 @@ async function scoreAgent(state: GraphState): Promise<Partial<EvaluationState>> 
     state.input.trainingTitle,
     state.input.trainee.name,
     state.context,
-    state.retrievedChunks
+    state.retrievedChunks,
+    state.profile
   );
 
   // 重评场景：追加 Reviewer 的修正意见
@@ -124,7 +140,7 @@ async function scoreAgent(state: GraphState): Promise<Partial<EvaluationState>> 
   };
 }
 
-// ── 节点 4：语气 + 安全（纯规则）─────────────────────────────
+// ── 节点 5：语气 + 安全（纯规则）─────────────────────────────
 
 function toneSafetyAgent(state: GraphState): Partial<EvaluationState> {
   const raw = state.rawScore!;
@@ -156,7 +172,7 @@ function toneSafetyAgent(state: GraphState): Partial<EvaluationState> {
   };
 }
 
-// ── 节点 5：Reviewer（Reflection 自审）───────────────────────
+// ── 节点 6：Reviewer（Reflection 自审）───────────────────────
 
 async function reviewerAgent(state: GraphState): Promise<Partial<EvaluationState>> {
   const { system, user } = buildReviewMessages(state.input.content, state.rawScore!);
@@ -178,7 +194,7 @@ function routeAfterReview(state: GraphState): string {
   return 'finalize';
 }
 
-// ── 节点 6：组装结果（纯规则）───────────────────────────────
+// ── 节点 7：组装结果（纯规则）───────────────────────────────
 
 function finalizeAgent(state: GraphState): Partial<EvaluationState> {
   const input = state.input;
@@ -213,13 +229,15 @@ function finalizeAgent(state: GraphState): Partial<EvaluationState> {
 const graph = new StateGraph(State)
   .addNode('parse', parseAgent)
   .addNode('retrieve', retrieveAgent)
+  .addNode('profileAgent', profileAgent)
   .addNode('score', scoreAgent)
   .addNode('toneSafety', toneSafetyAgent)
   .addNode('reviewer', reviewerAgent)
   .addNode('finalize', finalizeAgent)
   .addEdge(START, 'parse')
   .addEdge('parse', 'retrieve')
-  .addEdge('retrieve', 'score')
+  .addEdge('retrieve', 'profileAgent')
+  .addEdge('profileAgent', 'score')
   .addEdge('score', 'toneSafety')
   .addEdge('toneSafety', 'reviewer')
   .addConditionalEdges('reviewer', routeAfterReview, {

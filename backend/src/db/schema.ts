@@ -24,7 +24,23 @@ export function getDB(): Database.Database {
 
 function initializeSchema(db: Database.Database): void {
   db.exec(`
-    -- 评价记录表
+    -- 员工表（HR 维护档案：部门等）
+    -- 主键 employee_id 取「工号」，无工号时用姓名兜底
+    CREATE TABLE IF NOT EXISTS employees (
+      employee_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      department TEXT DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    -- 培训课程表
+    CREATE TABLE IF NOT EXISTS trainings (
+      title TEXT PRIMARY KEY,
+      type TEXT DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    -- 评价记录表（即评价历史）
     CREATE TABLE IF NOT EXISTS evaluations (
       id TEXT PRIMARY KEY,
       trainee_name TEXT NOT NULL,
@@ -44,9 +60,55 @@ function initializeSchema(db: Database.Database): void {
 
     -- 索引
     CREATE INDEX IF NOT EXISTS idx_evaluations_trainee ON evaluations(trainee_name);
+    CREATE INDEX IF NOT EXISTS idx_evaluations_employee ON evaluations(employee_id);
     CREATE INDEX IF NOT EXISTS idx_evaluations_created ON evaluations(created_at);
     CREATE INDEX IF NOT EXISTS idx_evaluations_exception ON evaluations(is_exception, exception_status);
+    CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department);
   `);
+
+  backfillEmployees(db);
+  backfillTrainings(db);
+}
+
+/**
+ * 迁移：从既有 evaluations 回填员工表
+ * 幂等（INSERT OR IGNORE），重复执行不产生重复数据
+ */
+function backfillEmployees(db: Database.Database): void {
+  // 归一化：历史里无工号的评价，用姓名作为身份键，与 resolveEmployeeKey 保持一致
+  db.exec(`UPDATE evaluations SET employee_id = trainee_name WHERE employee_id = '' OR employee_id IS NULL`);
+
+  const rows = db
+    .prepare(
+      'SELECT trainee_name, employee_id, MIN(created_at) as first_seen FROM evaluations GROUP BY trainee_name, employee_id'
+    )
+    .all() as { trainee_name: string; employee_id: string; first_seen: string }[];
+
+  const stmt = db.prepare(
+    'INSERT OR IGNORE INTO employees (employee_id, name, department, created_at) VALUES (?, ?, ?, ?)'
+  );
+  for (const r of rows) {
+    const key = r.employee_id || r.trainee_name;
+    stmt.run(key, r.trainee_name, '', r.first_seen);
+  }
+}
+
+/**
+ * 迁移：从既有 evaluations 回填培训课程表
+ */
+function backfillTrainings(db: Database.Database): void {
+  const rows = db
+    .prepare(
+      'SELECT training_title, MIN(created_at) as first_seen FROM evaluations GROUP BY training_title'
+    )
+    .all() as { training_title: string; first_seen: string }[];
+
+  const stmt = db.prepare(
+    'INSERT OR IGNORE INTO trainings (title, type, created_at) VALUES (?, ?, ?)'
+  );
+  for (const r of rows) {
+    stmt.run(r.training_title, '', r.first_seen);
+  }
 }
 
 export function closeDB(): void {

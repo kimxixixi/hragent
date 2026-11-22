@@ -1,0 +1,119 @@
+/**
+ * 员工学习画像 — 从 evaluations 历史聚合出得分趋势与薄弱维度
+ *
+ * 供「个性化反馈」使用：评分 Agent 据此针对薄弱维度给建议、参考趋势调整措辞。
+ */
+import { getDB } from './schema';
+import type {
+  EmployeeProfile,
+  DimensionAverage,
+  ScoreTrend,
+  DimensionScore,
+  EvaluationRow,
+} from '../types';
+
+// 10 分制下，维度历史均分低于该阈值视为"薄弱"
+const WEAK_THRESHOLD = 6;
+
+/**
+ * 获取员工学习画像
+ * @param employeeId 员工身份键（工号，无工号时用姓名）
+ */
+export function getEmployeeProfile(employeeId: string): EmployeeProfile {
+  const db = getDB();
+
+  const emp = db
+    .prepare('SELECT * FROM employees WHERE employee_id = ?')
+    .get(employeeId) as
+    | { employee_id: string; name: string; department: string; created_at: string }
+    | undefined;
+
+  // 该员工全部评价，按时间升序
+  const rows = db
+    .prepare('SELECT * FROM evaluations WHERE employee_id = ? ORDER BY created_at ASC')
+    .all(employeeId) as EvaluationRow[];
+
+  if (rows.length === 0) {
+    return {
+      employeeId,
+      name: emp?.name || employeeId,
+      department: emp?.department || '',
+      evaluationCount: 0,
+      averageScore: 0,
+      trend: 'first_time',
+      weakDimensions: [],
+      dimensionAverages: [],
+      recentScores: [],
+    };
+  }
+
+  // 总分平均
+  const total = rows.reduce((s, r) => s + r.total_score, 0);
+  const averageScore = Math.round((total / rows.length) * 10) / 10;
+
+  // 各维度历史均分
+  const dimMap = new Map<string, { name: string; label: string; sum: number; count: number }>();
+  for (const r of rows) {
+    const dims = JSON.parse(r.dimensions_json) as DimensionScore[];
+    for (const d of dims) {
+      const cur = dimMap.get(d.name) || { name: d.name, label: d.label, sum: 0, count: 0 };
+      cur.sum += d.score;
+      cur.count += 1;
+      dimMap.set(d.name, cur);
+    }
+  }
+  const dimensionAverages: DimensionAverage[] = [...dimMap.values()].map((v) => ({
+    name: v.name,
+    label: v.label,
+    avg: Math.round((v.sum / v.count) * 10) / 10,
+  }));
+
+  // 薄弱维度：历史均分 < 阈值，按从低到高排序
+  const weakDimensions = dimensionAverages
+    .filter((d) => d.avg < WEAK_THRESHOLD)
+    .sort((a, b) => a.avg - b.avg)
+    .map((d) => d.label);
+
+  // 得分趋势：末次相对首次的涨跌
+  const first = rows[0].total_score;
+  const last = rows[rows.length - 1].total_score;
+  let trend: ScoreTrend = 'stable';
+  if (last - first >= 0.5) trend = 'rising';
+  else if (first - last >= 0.5) trend = 'declining';
+
+  const recentScores = rows.slice(-5).map((r) => ({
+    title: r.training_title,
+    score: r.total_score,
+    date: r.created_at.slice(0, 10),
+  }));
+
+  return {
+    employeeId,
+    name: emp?.name || rows[0].trainee_name,
+    department: emp?.department || '',
+    evaluationCount: rows.length,
+    averageScore,
+    trend,
+    weakDimensions,
+    dimensionAverages,
+    recentScores,
+  };
+}
+
+/**
+ * 维护员工部门（HR 操作）
+ */
+export function updateEmployeeDepartment(employeeId: string, department: string): void {
+  const db = getDB();
+  db.prepare('UPDATE employees SET department = ? WHERE employee_id = ?').run(department, employeeId);
+}
+
+/**
+ * 列出全部员工档案
+ */
+export function listEmployees(): { employee_id: string; name: string; department: string; created_at: string }[] {
+  const db = getDB();
+  return db
+    .prepare('SELECT employee_id, name, department, created_at FROM employees ORDER BY created_at DESC')
+    .all() as { employee_id: string; name: string; department: string; created_at: string }[];
+}

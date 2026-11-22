@@ -111,3 +111,24 @@ export interface EvaluationRow {
   exception_status: string | null;
   created_at: string;
 }
+
+// ── 员工学习画像 ──
+export type ScoreTrend = 'first_time' | 'rising' | 'declining' | 'stable';
+
+export interface DimensionAverage {
+  name: string;   // 维度内部名（content_completeness 等）
+  label: string;  // 维度标签（内容完整性 等）
+  avg: number;    // 历史均分
+}
+
+export interface EmployeeProfile {
+  employeeId: string;
+  name: string;
+  department: string;
+  evaluationCount: number;
+  averageScore: number;
+  trend: ScoreTrend;
+  weakDimensions: string[];          // 薄弱维度标签（历史均分 < 6）
+  dimensionAverages: DimensionAverage[];
+  recentScores: { title: string; score: number; date: string }[];
+}

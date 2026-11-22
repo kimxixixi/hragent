@@ -1,4 +1,4 @@
-import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel } from '../types';
+import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel, EmployeeProfile } from '../types';
 import type { RetrievedChunk } from '../knowledge/vectorStore';
 
 /**
@@ -43,6 +43,9 @@ export interface EvaluationState {
 
   // 检索 Agent 产出（RAG 检索到的参考知识）
   retrievedChunks?: RetrievedChunk[];
+
+  // 画像节点产出（员工学习画像，供个性化反馈）
+  profile?: EmployeeProfile;
 
   // 评分 Agent 产出
   rawScore?: RawScore;

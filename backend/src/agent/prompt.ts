@@ -4,6 +4,7 @@
  */
 import type { ParseContext, RawScore } from './state';
 import type { RetrievedChunk } from '../knowledge/vectorStore';
+import type { EmployeeProfile } from '../types';
 
 // ── 解析 Agent ──────────────────────────────────────────────
 
@@ -119,7 +120,8 @@ export function buildScoreMessages(
   trainingTitle: string,
   traineeName: string,
   context?: ParseContext,
-  retrievedChunks?: RetrievedChunk[]
+  retrievedChunks?: RetrievedChunk[],
+  profile?: EmployeeProfile
 ) {
   const styles = [
     `员工 ${traineeName} 刚刚完成了培训《${trainingTitle}》，ta 的心得如下，你读完后给 ta 一个真诚的反馈：`,
@@ -138,7 +140,9 @@ export function buildScoreMessages(
     ? `\n\n${formatKnowledgeContext(retrievedChunks)}\n`
     : '';
 
-  const userMessage = `${style}${contextHint}${knowledgeHint}
+  const profileHint = formatProfileContext(profile);
+
+  const userMessage = `${style}${contextHint}${knowledgeHint}${profileHint}
 
 ---
 ${content}
@@ -178,6 +182,40 @@ export function formatKnowledgeContext(chunks: RetrievedChunk[]): string {
     return `${i + 1}. [${label}] ${c.text}`;
   });
   return `【知识库参考（检索到的相关材料，仅供你校准评分尺度，禁止照抄原文）】\n${lines.join('\n')}`;
+}
+
+// ── 员工画像格式化 ──────────────────────────────────────────
+
+const TREND_LABELS: Record<string, string> = {
+  first_time: '首次评价',
+  rising: '稳步上升',
+  declining: '有所回落',
+  stable: '整体平稳',
+};
+
+/**
+ * 把员工学习画像拼成给评分 Agent 的个性化参考段
+ * 首次评价（无历史）返回空串，避免给 LLM 塞无意义的空画像
+ */
+export function formatProfileContext(profile?: EmployeeProfile): string {
+  if (!profile || profile.evaluationCount === 0) return '';
+
+  const trendText = TREND_LABELS[profile.trend] || profile.trend;
+  const scoreLine = profile.recentScores.length > 0
+    ? profile.recentScores.map((s) => s.score).join(' → ')
+    : '';
+  const trendHint = scoreLine ? `${trendText}（${scoreLine}）` : trendText;
+
+  const lines = [
+    `- 部门：${profile.department || '未维护'}`,
+    `- 历史评价：${profile.evaluationCount} 次，平均 ${profile.averageScore} 分`,
+    `- 得分趋势：${trendHint}`,
+  ];
+  if (profile.weakDimensions.length > 0) {
+    lines.push(`- 薄弱维度：${profile.weakDimensions.join('、')}`);
+  }
+
+  return `\n\n【员工学习画像（用于个性化反馈，只参考、不要照搬原词）】\n${lines.join('\n')}\n\n个性化要求：若该员工有历史评价，可自然带一句"对比上次"；建议优先针对其薄弱维度给出具体可执行的做法；若趋势回落，语气多鼓励。`;
 }
 
 // ── Reviewer ────────────────────────────────────────────────

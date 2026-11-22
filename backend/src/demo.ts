@@ -7,7 +7,8 @@
 import 'dotenv/config';
 import { evaluateReflection } from './agent/evaluator';
 import { SAMPLE_REFLECTIONS } from './fixtures/sample-reflections';
-import { saveEvaluation, getStats } from './db/queries';
+import { saveEvaluation, getStats, resolveEmployeeKey } from './db/queries';
+import { getEmployeeProfile } from './db/profile';
 
 async function main() {
   console.log('═'.repeat(60));
@@ -79,6 +80,27 @@ async function main() {
     console.log('═'.repeat(60));
   } catch {
     // 数据库可能未初始化
+  }
+
+  // 显示员工学习画像
+  try {
+    const key = resolveEmployeeKey(sample[0].trainee);
+    const profile = getEmployeeProfile(key);
+    console.log('');
+    console.log('═'.repeat(60));
+    console.log(`  👤 员工学习画像 — ${profile.name}（${profile.department || '部门未维护'}）`);
+    console.log(`  历史评价: ${profile.evaluationCount} 次，平均 ${profile.averageScore} 分`);
+    if (profile.evaluationCount > 0) {
+      console.log(`  得分趋势: ${profile.trend}（${profile.recentScores.map((s) => s.score).join(' → ')}）`);
+      if (profile.weakDimensions.length > 0) {
+        console.log(`  薄弱维度: ${profile.weakDimensions.join('、')}`);
+      } else {
+        console.log(`  薄弱维度: 无`);
+      }
+    }
+    console.log('═'.repeat(60));
+  } catch {
+    // 画像查询失败不影响主流程
   }
 }
 

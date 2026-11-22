@@ -3,7 +3,7 @@ import type { ReflectionInput, EvaluationResult } from '../types';
 
 /**
  * 对单篇心得进行评价
- * 内部走 LangGraph 多 Agent 图（解析 → 检索 → 评分 → 语气安全 → Reviewer 自审 → 组装）
+ * 内部走 LangGraph 多 Agent 图（解析 → 检索 → 画像 → 评分 → 语气安全 → Reviewer 自审 → 组装）
  */
 export async function evaluateReflection(
   input: ReflectionInput
