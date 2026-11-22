@@ -9,6 +9,7 @@ Thumbs.db
 backend/data/
 backend/uploads/
 backend/test_*.json
+.venv-chroma/
 
 # 文档与记录（本地保留，不同步到 git，仅 README 例外）
 .workbuddy/
