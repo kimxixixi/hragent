@@ -7,9 +7,6 @@ export const SAMPLE_REFLECTIONS: ReflectionInput[] = [
   {
     trainee: {
       name: '张伟',
-      department: '销售部',
-      position: '销售代表',
-      isManagement: false,
       employeeId: 'S001',
     },
     trainingTitle: '高效沟通技巧',
@@ -27,9 +24,6 @@ export const SAMPLE_REFLECTIONS: ReflectionInput[] = [
   {
     trainee: {
       name: '李芳',
-      department: '人力资源部',
-      position: 'HR专员',
-      isManagement: false,
       employeeId: 'H002',
     },
     trainingTitle: '项目管理实战',
@@ -48,9 +42,6 @@ export const SAMPLE_REFLECTIONS: ReflectionInput[] = [
   {
     trainee: {
       name: '王建国',
-      department: '技术部',
-      position: '技术总监',
-      isManagement: true,
       employeeId: 'T003',
     },
     trainingTitle: '领导力发展',
@@ -65,9 +56,6 @@ export const SAMPLE_REFLECTIONS: ReflectionInput[] = [
   {
     trainee: {
       name: '陈小明',
-      department: '市场部',
-      position: '市场专员',
-      isManagement: false,
       employeeId: 'M004',
     },
     trainingTitle: '数据分析基础',
@@ -78,9 +66,6 @@ export const SAMPLE_REFLECTIONS: ReflectionInput[] = [
   {
     trainee: {
       name: '赵雪梅',
-      department: '财务部',
-      position: '财务经理',
-      isManagement: true,
       employeeId: 'F005',
     },
     trainingTitle: '跨部门协作',
