@@ -3,6 +3,7 @@
  * 评分标尺与维度权重沿用原 SYSTEM_PROMPT 的核心资产
  */
 import type { ParseContext, RawScore } from './state';
+import type { RetrievedChunk } from '../knowledge/vectorStore';
 
 // ── 解析 Agent ──────────────────────────────────────────────
 
@@ -117,7 +118,8 @@ export function buildScoreMessages(
   content: string,
   trainingTitle: string,
   traineeName: string,
-  context?: ParseContext
+  context?: ParseContext,
+  retrievedChunks?: RetrievedChunk[]
 ) {
   const styles = [
     `员工 ${traineeName} 刚刚完成了培训《${trainingTitle}》，ta 的心得如下，你读完后给 ta 一个真诚的反馈：`,
@@ -132,7 +134,11 @@ export function buildScoreMessages(
     ? `\n\n【解析参考 · 心得中提取到的知识点】\n${context.keyPoints.join('、')}\n`
     : '';
 
-  const userMessage = `${style}${contextHint}
+  const knowledgeHint = retrievedChunks && retrievedChunks.length > 0
+    ? `\n\n${formatKnowledgeContext(retrievedChunks)}\n`
+    : '';
+
+  const userMessage = `${style}${contextHint}${knowledgeHint}
 
 ---
 ${content}
@@ -144,6 +150,34 @@ ${content}
     system: SCORE_SYSTEM_PROMPT,
     user: userMessage,
   };
+}
+
+// ── 知识库检索结果格式化 ────────────────────────────────────
+
+const KIND_LABELS: Record<string, string> = {
+  competency_level: '能力模型',
+  position_profile: '岗位画像',
+  evaluation_template: '评价模板',
+  sample_reflection: '历史心得参考',
+};
+
+/**
+ * 把 RAG 检索到的知识块拼成给评分 Agent 的参考段
+ * 明确要求"仅供校准、不要照抄"，避免评分 Agent 机械复述检索结果
+ */
+export function formatKnowledgeContext(chunks: RetrievedChunk[]): string {
+  const lines = chunks.map((c, i) => {
+    const kind = KIND_LABELS[c.metadata.kind as string] || '参考';
+    const title =
+      (c.metadata.dimension as string) ||
+      (c.metadata.position as string) ||
+      (c.metadata.trainingType as string) ||
+      (c.metadata.trainingTitle as string) ||
+      '';
+    const label = title ? `${kind}·${title}` : kind;
+    return `${i + 1}. [${label}] ${c.text}`;
+  });
+  return `【知识库参考（检索到的相关材料，仅供你校准评分尺度，禁止照抄原文）】\n${lines.join('\n')}`;
 }
 
 // ── Reviewer ────────────────────────────────────────────────

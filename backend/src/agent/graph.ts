@@ -1,8 +1,8 @@
 /**
  * LangGraph 多 Agent 评价图
- * 用 StateGraph 替换原固定管线，拆分为 5 个节点 + Reflection 回边
+ * 用 StateGraph 替换原固定管线，拆分为 6 个节点 + Reflection 回边
  *
- * 流程：解析 → 评分 → 语气安全 → Reviewer 自审 → 组装结果
+ * 流程：解析 → 检索(RAG) → 评分 → 语气安全 → Reviewer 自审 → 组装结果
  *       Reviewer 未通过时回退到评分重评（最多一次）
  */
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
@@ -12,6 +12,7 @@ import { buildParseMessages, buildScoreMessages, buildReviewMessages } from './p
 import { determineToneLevel, shouldFlagException } from './toneEngine';
 import { safetyCheck, sanitizeFeedback } from './safetyFilter';
 import { notifyHRException } from '../services/notify';
+import { buildQuery, retrieveKnowledge } from '../knowledge/retrieve';
 import type { EvaluationState, ParseContext, RawScore, ReviewResult } from './state';
 import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel } from '../types';
 
@@ -20,6 +21,7 @@ import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel } fro
 const State = Annotation.Root({
   input: Annotation<ReflectionInput>(),
   context: Annotation<ParseContext | undefined>(),
+  retrievedChunks: Annotation<EvaluationState['retrievedChunks']>(),
   rawScore: Annotation<RawScore | undefined>(),
   tone: Annotation<ToneLevel | undefined>(),
   feedbackSummary: Annotation<string | undefined>(),
@@ -50,14 +52,48 @@ async function parseAgent(state: GraphState): Promise<Partial<EvaluationState>> 
   };
 }
 
-// ── 节点 2：评分 Agent ──────────────────────────────────────
+// ── 节点 2：检索 Agent（RAG）────────────────────────────────
+
+async function retrieveAgent(state: GraphState): Promise<Partial<EvaluationState>> {
+  const ctx = state.context!;
+  const query = buildQuery(ctx.trainingTopic, ctx.keyPoints);
+
+  try {
+    // 多取 1 条，用于过滤掉"与当前心得同源"的历史参考（避免自匹配）
+    const chunks = await retrieveKnowledge(query, 6);
+    const selfEmployeeId = state.input.trainee.employeeId;
+
+    const filtered = chunks.filter(
+      (c) =>
+        !(
+          c.metadata.kind === 'sample_reflection' &&
+          selfEmployeeId &&
+          c.metadata.employeeId === selfEmployeeId
+        )
+    );
+
+    const result = filtered.slice(0, 5);
+    console.log(
+      `[RAG] 检索「${query.slice(0, 30)}」→ ${result.length} 条参考：` +
+        result.map((c) => c.metadata.kind).join('、')
+    );
+    return { retrievedChunks: result };
+  } catch (err: any) {
+    // 向量库不可用时降级：跳过 RAG，直接进入评分，不拖垮整个评价链路
+    console.warn(`[RAG] 检索失败，降级为无知识库评分: ${err.message}`);
+    return { retrievedChunks: [] };
+  }
+}
+
+// ── 节点 3：评分 Agent ──────────────────────────────────────
 
 async function scoreAgent(state: GraphState): Promise<Partial<EvaluationState>> {
   const { system, user } = buildScoreMessages(
     state.input.content,
     state.input.trainingTitle,
     state.input.trainee.name,
-    state.context
+    state.context,
+    state.retrievedChunks
   );
 
   // 重评场景：追加 Reviewer 的修正意见
@@ -88,7 +124,7 @@ async function scoreAgent(state: GraphState): Promise<Partial<EvaluationState>> 
   };
 }
 
-// ── 节点 3：语气 + 安全（纯规则）─────────────────────────────
+// ── 节点 4：语气 + 安全（纯规则）─────────────────────────────
 
 function toneSafetyAgent(state: GraphState): Partial<EvaluationState> {
   const raw = state.rawScore!;
@@ -120,7 +156,7 @@ function toneSafetyAgent(state: GraphState): Partial<EvaluationState> {
   };
 }
 
-// ── 节点 4：Reviewer（Reflection 自审）───────────────────────
+// ── 节点 5：Reviewer（Reflection 自审）───────────────────────
 
 async function reviewerAgent(state: GraphState): Promise<Partial<EvaluationState>> {
   const { system, user } = buildReviewMessages(state.input.content, state.rawScore!);
@@ -142,7 +178,7 @@ function routeAfterReview(state: GraphState): string {
   return 'finalize';
 }
 
-// ── 节点 5：组装结果（纯规则）───────────────────────────────
+// ── 节点 6：组装结果（纯规则）───────────────────────────────
 
 function finalizeAgent(state: GraphState): Partial<EvaluationState> {
   const input = state.input;
@@ -176,12 +212,14 @@ function finalizeAgent(state: GraphState): Partial<EvaluationState> {
 
 const graph = new StateGraph(State)
   .addNode('parse', parseAgent)
+  .addNode('retrieve', retrieveAgent)
   .addNode('score', scoreAgent)
   .addNode('toneSafety', toneSafetyAgent)
   .addNode('reviewer', reviewerAgent)
   .addNode('finalize', finalizeAgent)
   .addEdge(START, 'parse')
-  .addEdge('parse', 'score')
+  .addEdge('parse', 'retrieve')
+  .addEdge('retrieve', 'score')
   .addEdge('score', 'toneSafety')
   .addEdge('toneSafety', 'reviewer')
   .addConditionalEdges('reviewer', routeAfterReview, {

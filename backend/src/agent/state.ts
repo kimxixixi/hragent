@@ -1,4 +1,5 @@
 import type { ReflectionInput, EvaluationResult, DimensionScore, ToneLevel } from '../types';
+import type { RetrievedChunk } from '../knowledge/vectorStore';
 
 /**
  * 解析 Agent 产出 — 从心得中提取的结构化上下文
@@ -39,6 +40,9 @@ export interface EvaluationState {
 
   // 解析 Agent 产出
   context?: ParseContext;
+
+  // 检索 Agent 产出（RAG 检索到的参考知识）
+  retrievedChunks?: RetrievedChunk[];
 
   // 评分 Agent 产出
   rawScore?: RawScore;
